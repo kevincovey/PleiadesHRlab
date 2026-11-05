@@ -1,82 +1,94 @@
-<html>
-
+<!doctype html>
+<html lang="en">
 <head>
-
-
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pleiades HR Diagram Lab</title>
-
-
-<link rel='stylesheet' href='https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.css' />
-
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+         max-width: 820px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  #infoDiv { font-size: 1.1rem; font-weight: 600; min-height: 1.6em;
+             padding: .5rem .75rem; background: #eef4ff; border-radius: 6px; margin: .75rem 0; }
+  #aladin-lite-div { width: 100%; max-width: 600px; height: 600px; background: #111; }
+  #status { color: #a00; font-size: .9rem; min-height: 1.2em; }
+  .note { color: #555; font-size: .95rem; }
+</style>
 </head>
-
 <body>
 
 <h1>Pleiades Star Cluster</h1>
-<h3>HR Diagram Lab by Kristen Larson (Western Washington University)</h3>
+<p><strong>HR Diagram Lab</strong> by Kristen Larson, with updates
+from Kevin Covey (Western Washington University)</p>
 
-<br>
-	
-<br>
-	
-<h3>
-Hover over a star and record the temperature and luminosity shown here:
+<h3>Hover over a star to record its temperature and luminosity:</h3>
+<div id="infoDiv">&nbsp;</div>
+<div id="aladin-lite-div"></div>
+<p id="status"></p>
 
-<script type="text/javascript" src="https://code.jquery.com/jquery-1.12.1.min.js" charset="utf-8"></script>
+<!-- p class="note"  You can also click a star to open its data -->
 
-<div id='infoDiv'>&nbsp; </div>
-<div id='aladin-lite-div' style='width: 500px;height: 500px;'></div>
+<h3>Reference</h3>
+<p>Data are from
+<a href="https://www.aanda.org/articles/aa/abs/2015/05/aa25019-14/aa25019-14.html">The Seven Sisters DANCe
+by Bouy et al. (2015)</a>.</p>
 
-<script type='text/javascript' src='https://aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.js' charset='utf-8'></script>
+<p>Tycho and DANCe catalog files have been
+merged, limited to stars with 95 percent probability of membership, and stored
+in a cvs file in github to avoid outages due to CDS downtime. </p>
 
-<script type="text/javascript">
-	var aladin = A.aladin('#aladin-lite-div', {target: 'M 45', fov: 3, showReticle: false});
+<p>Many thanks to Bouy et al for the data, and Dr. Larson for the web interface!</p>
 
-	aladin.addCatalog(A.catalogFromVizieR('J/A+A/577/A148/dancep&Pmb=%3E0.95', 'M 45', 1.5, {onClick: 'showPopup'}));
-	aladin.addCatalog(A.catalogFromVizieR('J/A+A/577/A148/dancept&Pmb=%3E0.95', 'M 45', 1.5, {onClick: 'showPopup'}));
+<script type="module">
+const statusEl = document.getElementById('status');
+const infoEl   = document.getElementById('infoDiv');
+const say = (m) => { statusEl.textContent = m; };
 
-	aladin.on('objectHovered', function(object) {
-    		var msg;
-    		if (object) {
-			var lumin = object.data.Lbol;
-        		msg = 'Star: Temperature = ' + object.data.Teff + ' K, Luminosity = ' + Number(lumin) + ' L_sun';
-    		}
-    		else {
-        		msg = 'No object hovered';
-    		}
-    		$('#infoDiv').html(msg);
-	});
+// Pleiades (M45) explicit coordinates -- avoids depending on CDS/SIMBAD name resolution.
+const PLEIADES = { ra: 56.75, dec: 24.1167 };
+
+try {
+  // Aladin Lite v3 from jsDelivr, NOT from aladin.cds.unistra.fr
+  const mod = await import('https://cdn.jsdelivr.net/npm/aladin-lite@3.9.2-beta/dist/aladin.js');
+  const A = mod.default;
+  await A.init;
+
+  const aladin = A.aladin('#aladin-lite-div', {
+    target: `${PLEIADES.ra} ${PLEIADES.dec}`,
+    fov: 2,
+    cooFrame: 'ICRS',
+    showReticle: false,
+    // ESA sky tiles -- independent of CDS
+    survey: 'https://skies.esac.esa.int/DSSColor/'
+  });
+
+  // Local catalog file committed to this repo -- no live VizieR dependency.
+  const resp = await fetch('pleiades.Merged+Trimmed.csv');
+  if (!resp.ok) throw new Error(`could not load pleiades.trimmed.csv (HTTP ${resp.status})`);
+  const rows = (await resp.text()).trim().split('\n');
+  const header = rows.shift().split(',').map(s => s.trim());
+  const ix = (n) => header.indexOf(n);
+
+  const cat = A.catalog({ name: 'Pleiades (DANCe)', sourceSize: 12, color: '#33ccff' });
+  aladin.addCatalog(cat);
+  cat.addSources(rows.map(line => {
+    const c = line.split(',');
+    return A.source(+c[ix('RAJ2000')], +c[ix('DEJ2000')],
+                    { Teff: c[ix('Teff')], Lbol: c[ix('Lbol')] });
+  }));
+
+  aladin.on('objectHovered', (object) => {
+    infoEl.innerHTML = (object && object.data)
+      ? `Star: Temperature = ${object.data.Teff} K, Luminosity = ${Number(object.data.Lbol)} L_sun`
+      : 'No object hovered';
+  });
+
+  say('');
+} catch (err) {
+  // Never hang silently -- tell the student what happened.
+  say('Sky viewer could not load: ' + err.message);
+  infoEl.textContent = 'Viewer unavailable - see message below the map.';
+}
 </script>
-</h3>
-	
-Or, click on a star and scroll to the bottom of the data popup to find temperature (Teff, in Kelvin)
-and luminosity (Lbol, in solar units).
-
-
-
-<br>
-
-
-<br>
-
-<br>
-
-<br>
-
-<h3>Reference:</h3> <br>
-Data are from the paper <a href="https://www.aanda.org/articles/aa/abs/2015/05/aa25019-14/aa25019-14.html">
-The Seven Sisters DANCe by Bouy et al. (2015)</a>
-
-Objects shown belong to the star cluster with 95 percent probability.  Green symbols are 
-from the second release of the DANCe-Pleiades survey, and blue symbols are from the 
-Tycho-2 catalog.
-
-There are many published studies of the Pleiades star cluster, but we chose this one
-because it includes temperature and luminosity in solar units in the <a 
-href="https://vizier.cfa.harvard.edu/viz-bin/VizieR?-source=J/A+A/577/A148">published catalog 
-available online</a>.  Many thanks to Bouy et al!
-
 
 </body>
-
 </html>
